@@ -1,0 +1,54 @@
+{
+    "name": "image-sync-diff",
+    "displayName": "Image Sync Diff",
+    "description": "Synchronized image comparison with overlay support",
+    "version": "0.0.1",
+    "icon": "media/icon.png",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onView:image-sync-diff-sidebar"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "image-sync-diff.start",
+                "title": "Image Sync Diff: Start"
+            }
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "image-sync-diff-container",
+                    "title": "Image Sync Diff",
+                    "icon": "media/icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "image-sync-diff-container": [
+                {
+                    "type": "webview",
+                    "id": "image-sync-diff-sidebar",
+                    "name": "Image Sync Diff",
+                    "icon": "media/icon.svg"
+                }
+            ]
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.80.0",
+        "@types/node": "18.x",
+        "typescript": "^5.1.3"
+    }
+}
