@@ -10,6 +10,9 @@
     const leftFilenameEl = document.getElementById('left-filename');
     const rightFilenameEl = document.getElementById('right-filename');
 
+    // Access VS Code API
+    const vscode = acquireVsCodeApi();
+
     // State for pan/zoom
     let state = {
         scale: 1,
@@ -24,46 +27,24 @@
         zoomLevelEl.textContent = `${Math.round(state.scale * 100)}%`;
     }
 
-    // --- Drag & Drop ---
-    function handleDrop(e, imgElement, filenameElement, isRight = false) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                imgElement.src = event.target.result;
-                if (isRight) {
-                    overlayImage.src = event.target.result;
-                }
-
-                // Hide placeholder
-                const p = imgElement.parentElement.querySelector('.placeholder');
-                if (p) p.style.display = 'none';
-
-                // Show filename
-                filenameElement.textContent = file.name;
-                filenameElement.style.display = 'block';
-
-                // Reset view when new image loads
-                resetView();
-            };
-            reader.readAsDataURL(file);
+    // Helper to display image
+    function displayImage(imgElement, filenameElement, src, filename, isRight = false) {
+        imgElement.src = src;
+        if (isRight) {
+            overlayImage.src = src;
         }
+
+        // Hide placeholder
+        const p = imgElement.parentElement.querySelector('.placeholder');
+        if (p) p.style.display = 'none';
+
+        // Show filename
+        filenameElement.textContent = filename;
+        filenameElement.style.display = 'block';
+
+        // Reset view when new image loads
+        resetView();
     }
-
-    function handleDragOver(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    [leftContainer, rightContainer].forEach(c => {
-        c.addEventListener('dragover', handleDragOver);
-    });
-
-    leftContainer.addEventListener('drop', (e) => handleDrop(e, leftImage, leftFilenameEl, false));
-    rightContainer.addEventListener('drop', (e) => handleDrop(e, rightImage, rightFilenameEl, true));
 
     // --- Sync Zoom & Pan ---
     function updateTransform() {
@@ -152,6 +133,18 @@
     // Also handle mouse leave on button just in case
     overlayBtn.addEventListener('mouseleave', () => {
         container.classList.remove('overlay-mode');
+    });
+
+    // --- Message listener for loaded images from extension ---
+    window.addEventListener('message', event => {
+        const message = event.data;
+        switch (message.command) {
+            case 'imageLoaded':
+                const imgElement = message.isRight ? rightImage : leftImage;
+                const filenameElement = message.isRight ? rightFilenameEl : leftFilenameEl;
+                displayImage(imgElement, filenameElement, message.data, message.filename, message.isRight);
+                break;
+        }
     });
 
 })();

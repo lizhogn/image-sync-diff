@@ -1,8 +1,9 @@
 {
     "name": "image-sync-diff",
     "displayName": "Image Sync Diff",
+    "publisher": "lizhogn",
     "description": "Synchronized image comparison with overlay support",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "icon": "media/icon.png",
     "engines": {
         "vscode": "^1.80.0"
@@ -10,17 +11,27 @@
     "categories": [
         "Other"
     ],
-    "activationEvents": [
-        "onView:image-sync-diff-sidebar"
-    ],
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
             {
                 "command": "image-sync-diff.start",
                 "title": "Image Sync Diff: Start"
+            },
+            {
+                "command": "image-sync-diff.compareImages",
+                "title": "Compare Images with Sync Diff"
             }
         ],
+        "menus": {
+            "explorer/context": [
+                {
+                    "command": "image-sync-diff.compareImages",
+                    "when": "resourceExtname =~ /\\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i",
+                    "group": "2_workspace"
+                }
+            ]
+        },
         "viewsContainers": {
             "activitybar": [
                 {
