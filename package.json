@@ -3,7 +3,7 @@
     "displayName": "Image Sync Diff",
     "publisher": "lizhogn",
     "description": "Synchronized image comparison with overlay support",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "icon": "media/icon.png",
     "engines": {
         "vscode": "^1.80.0"
