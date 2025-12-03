@@ -66,7 +66,7 @@ export class ImageDiffPanel {
                             this._panel.webview.postMessage({
                                 command: 'imageLoaded',
                                 data: `data:${mimeType};base64,${base64}`,
-                                filename: uri.path.split('/').pop(),
+                                filename: uri.fsPath,
                                 isRight: message.isRight
                             });
                         } catch (e) {
@@ -110,14 +110,14 @@ export class ImageDiffPanel {
             this._panel.webview.postMessage({
                 command: 'imageLoaded',
                 data: `data:${leftMimeType};base64,${leftBase64}`,
-                filename: leftUri.path.split('/').pop(),
+                filename: leftUri.fsPath,
                 isRight: false
             });
 
             this._panel.webview.postMessage({
                 command: 'imageLoaded',
                 data: `data:${rightMimeType};base64,${rightBase64}`,
-                filename: rightUri.path.split('/').pop(),
+                filename: rightUri.fsPath,
                 isRight: true
             });
         } catch (e) {
