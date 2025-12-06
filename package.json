@@ -21,12 +21,34 @@
             {
                 "command": "image-sync-diff.compareImages",
                 "title": "Compare Images with Sync Diff"
+            },
+            {
+                "command": "image-sync-diff.setFirstImage",
+                "title": "Set as First Image"
+            },
+            {
+                "command": "image-sync-diff.compareWithFirst",
+                "title": "Compare with First Image"
+            },
+            {
+                "command": "image-sync-diff.clearFirstImage",
+                "title": "Clear First Image"
             }
         ],
         "menus": {
             "explorer/context": [
                 {
                     "command": "image-sync-diff.compareImages",
+                    "when": "resourceExtname =~ /\\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i",
+                    "group": "2_workspace"
+                },
+                {
+                    "command": "image-sync-diff.setFirstImage",
+                    "when": "resourceExtname =~ /\\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i",
+                    "group": "2_workspace"
+                },
+                {
+                    "command": "image-sync-diff.compareWithFirst",
                     "when": "resourceExtname =~ /\\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i",
                     "group": "2_workspace"
                 }
