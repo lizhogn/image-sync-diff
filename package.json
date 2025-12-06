@@ -2,8 +2,9 @@
     "name": "image-sync-diff",
     "displayName": "Image Sync Diff",
     "publisher": "lizhogn",
+    "repository": "https://github.com/lizhogn/image-sync-diff",
     "description": "Synchronized image comparison with overlay support",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "icon": "media/icon.png",
     "engines": {
         "vscode": "^1.80.0"

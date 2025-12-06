@@ -5,6 +5,8 @@ export class ImageDiffPanel {
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
+    private _pendingImages?: { leftUri: vscode.Uri; rightUri: vscode.Uri };
+    private _webviewReady: boolean = false;
 
     public static createOrShow(extensionUri: vscode.Uri, leftImageUri?: vscode.Uri, rightImageUri?: vscode.Uri) {
         const column = vscode.window.activeTextEditor
@@ -21,6 +23,16 @@ export class ImageDiffPanel {
         }
 
         // Otherwise, create a new panel.
+        // Build localResourceRoots including workspace folders for remote scenarios
+        const localResourceRoots: vscode.Uri[] = [vscode.Uri.joinPath(extensionUri, 'media')];
+
+        // Add all workspace folders to allow loading images from workspace
+        if (vscode.workspace.workspaceFolders) {
+            for (const folder of vscode.workspace.workspaceFolders) {
+                localResourceRoots.push(folder.uri);
+            }
+        }
+
         const panel = vscode.window.createWebviewPanel(
             'imageDiff',
             'Image Sync Diff',
@@ -28,16 +40,16 @@ export class ImageDiffPanel {
             {
                 // Enable javascript in the webview
                 enableScripts: true,
-                // And restrict the webview to only loading content from our extension's `media` directory.
-                localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
+                // Allow loading from extension media and workspace folders
+                localResourceRoots: localResourceRoots
             }
         );
 
         ImageDiffPanel.currentPanel = new ImageDiffPanel(panel, extensionUri);
 
-        // Auto-load images if provided
+        // Store images to load after webview is ready (avoids race condition)
         if (leftImageUri && rightImageUri) {
-            ImageDiffPanel.currentPanel._loadImages(leftImageUri, rightImageUri);
+            ImageDiffPanel.currentPanel._pendingImages = { leftUri: leftImageUri, rightUri: rightImageUri };
         }
     }
 
@@ -56,6 +68,14 @@ export class ImageDiffPanel {
         this._panel.webview.onDidReceiveMessage(
             async message => {
                 switch (message.command) {
+                    case 'webviewReady':
+                        // Webview is ready, load any pending images
+                        this._webviewReady = true;
+                        if (this._pendingImages) {
+                            await this._loadImages(this._pendingImages.leftUri, this._pendingImages.rightUri);
+                            this._pendingImages = undefined;
+                        }
+                        return;
                     case 'loadImage':
                         try {
                             const uri = vscode.Uri.parse(message.uri);
@@ -70,6 +90,7 @@ export class ImageDiffPanel {
                                 isRight: message.isRight
                             });
                         } catch (e) {
+                            console.error('Failed to load image:', e);
                             vscode.window.showErrorMessage(`Failed to load image: ${e}`);
                         }
                         return;
@@ -95,32 +116,41 @@ export class ImageDiffPanel {
     }
 
     private async _loadImages(leftUri: vscode.Uri, rightUri: vscode.Uri) {
+        // If webview is not ready yet, store as pending
+        if (!this._webviewReady) {
+            this._pendingImages = { leftUri, rightUri };
+            return;
+        }
+
         try {
-            // Load left image
+            // Load left image using workspace.fs API (works for both local and remote)
+            console.log('Loading left image:', leftUri.toString());
             const leftData = await vscode.workspace.fs.readFile(leftUri);
             const leftBase64 = Buffer.from(leftData).toString('base64');
-            const leftMimeType = this._getMimeType(leftUri.fsPath);
+            const leftMimeType = this._getMimeType(leftUri.path || leftUri.fsPath);
 
             // Load right image
+            console.log('Loading right image:', rightUri.toString());
             const rightData = await vscode.workspace.fs.readFile(rightUri);
             const rightBase64 = Buffer.from(rightData).toString('base64');
-            const rightMimeType = this._getMimeType(rightUri.fsPath);
+            const rightMimeType = this._getMimeType(rightUri.path || rightUri.fsPath);
 
             // Send both images to webview
             this._panel.webview.postMessage({
                 command: 'imageLoaded',
                 data: `data:${leftMimeType};base64,${leftBase64}`,
-                filename: leftUri.fsPath,
+                filename: leftUri.path || leftUri.fsPath,
                 isRight: false
             });
 
             this._panel.webview.postMessage({
                 command: 'imageLoaded',
                 data: `data:${rightMimeType};base64,${rightBase64}`,
-                filename: rightUri.fsPath,
+                filename: rightUri.path || rightUri.fsPath,
                 isRight: true
             });
         } catch (e) {
+            console.error('Failed to load images:', e);
             vscode.window.showErrorMessage(`Failed to load images: ${e}`);
         }
     }

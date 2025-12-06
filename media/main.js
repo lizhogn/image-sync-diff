@@ -320,4 +320,8 @@
         }
     });
 
+    // Notify extension that webview is ready to receive images
+    // This prevents race condition where images are sent before webview is loaded
+    vscode.postMessage({ command: 'webviewReady' });
+
 })();
