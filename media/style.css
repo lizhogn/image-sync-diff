@@ -28,6 +28,69 @@ body {
     opacity: 0.8;
 }
 
+.mode-controls {
+    position: absolute;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mode-selector {
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.mode-selector:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.opacity-control {
+    display: none;
+    align-items: center;
+    gap: 8px;
+}
+
+.opacity-control.active {
+    display: flex;
+}
+
+.opacity-control label {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.opacity-slider {
+    width: 120px;
+    cursor: pointer;
+}
+
+.differences-control {
+    display: none;
+    align-items: center;
+    gap: 6px;
+}
+
+.differences-control.active {
+    display: flex;
+}
+
+.differences-control label {
+    font-size: 11px;
+    opacity: 0.8;
+    cursor: pointer;
+    user-select: none;
+}
+
+.differences-control input[type="checkbox"] {
+    cursor: pointer;
+}
+
 #overlayBtn {
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
@@ -53,6 +116,24 @@ body {
     display: flex;
     position: relative;
     overflow: hidden;
+}
+
+/* Dissolve mode: stack images on top of each other */
+.container.dissolve-mode {
+    display: block;
+}
+
+.container.dissolve-mode .image-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-right: none;
+}
+
+.container.dissolve-mode #right-container {
+    z-index: 5;
 }
 
 .image-container {
@@ -102,6 +183,12 @@ body {
     /* Hidden by default */
 }
 
+#diff-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    display: none;
+}
+
 /* Overlay Mode Styles */
 .container.overlay-mode #left-image {
     display: none;
@@ -111,4 +198,22 @@ body {
 .container.overlay-mode #overlay-image {
     display: block;
     /* Show overlay image */
+}
+
+#overlay-diff-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    display: none;
+    position: absolute;
+}
+
+/* Overlay Diff Mode Styles (when differences checkbox is checked) */
+.container.overlay-diff-mode #left-image {
+    display: none;
+    /* Hide left image */
+}
+
+.container.overlay-diff-mode #overlay-diff-canvas {
+    display: block;
+    /* Show difference overlay canvas */
 }

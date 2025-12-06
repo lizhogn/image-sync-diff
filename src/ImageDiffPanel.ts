@@ -169,6 +169,20 @@ export class ImageDiffPanel {
                 <path fill-rule="evenodd" d="M12 8a.5.5 0 0 1-.5.5H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5a.5.5 0 0 1 .5.5z"/>
             </svg>
         </button>
+        <div class="mode-controls">
+            <select id="modeSelector" class="mode-selector">
+                <option value="sidebyside">Side by Side</option>
+                <option value="dissolve">Dissolve</option>
+            </select>
+            <div id="opacityControl" class="opacity-control">
+                <label for="opacitySlider">Opacity:</label>
+                <input type="range" id="opacitySlider" class="opacity-slider" min="0" max="100" value="50">
+            </div>
+            <div id="differencesControl" class="differences-control active">
+                <input type="checkbox" id="differencesCheckbox">
+                <label for="differencesCheckbox">Differences</label>
+            </div>
+        </div>
     </div>
     <div class="container">
         <div id="left-container" class="image-container">
@@ -176,11 +190,13 @@ export class ImageDiffPanel {
             <div class="placeholder">Select 2 images in Explorer, right-click and choose "Compare Images with Sync Diff"</div>
             <img id="left-image" class="sync-image" draggable="false" />
             <img id="overlay-image" class="sync-image" draggable="false" />
+            <canvas id="overlay-diff-canvas"></canvas>
         </div>
         <div id="right-container" class="image-container">
             <div class="filename" id="right-filename"></div>
             <div class="placeholder">Select 2 images in Explorer, right-click and choose "Compare Images with Sync Diff"</div>
             <img id="right-image" class="sync-image" draggable="false" />
+            <canvas id="diff-canvas"></canvas>
         </div>
     </div>
     <script src="${scriptUri}"></script>
