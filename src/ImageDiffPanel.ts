@@ -1,32 +1,38 @@
 import * as vscode from 'vscode';
 
+const MIME_TYPES: Record<string, string> = {
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'svg': 'image/svg+xml',
+    'bmp': 'image/bmp'
+};
+
 export class ImageDiffPanel {
     public static currentPanel: ImageDiffPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
-    private _pendingImages?: { leftUri: vscode.Uri; rightUri: vscode.Uri };
-    private _webviewReady: boolean = false;
+    private _pendingImages?: vscode.Uri[];
+    private _webviewReady = false;
 
-    public static createOrShow(extensionUri: vscode.Uri, leftImageUri?: vscode.Uri, rightImageUri?: vscode.Uri) {
+    public static createOrShow(extensionUri: vscode.Uri, imageUris?: vscode.Uri[]): void {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // If we already have a panel, show it and load the new images.
         if (ImageDiffPanel.currentPanel) {
             ImageDiffPanel.currentPanel._panel.reveal(column);
-            if (leftImageUri && rightImageUri) {
-                ImageDiffPanel.currentPanel._loadImages(leftImageUri, rightImageUri);
+            if (imageUris && imageUris.length >= 2) {
+                ImageDiffPanel.currentPanel._loadImages(imageUris);
             }
             return;
         }
 
-        // Otherwise, create a new panel.
-        // Build localResourceRoots including workspace folders for remote scenarios
         const localResourceRoots: vscode.Uri[] = [vscode.Uri.joinPath(extensionUri, 'media')];
 
-        // Add all workspace folders to allow loading images from workspace
         if (vscode.workspace.workspaceFolders) {
             for (const folder of vscode.workspace.workspaceFolders) {
                 localResourceRoots.push(folder.uri);
@@ -38,18 +44,16 @@ export class ImageDiffPanel {
             'Image Sync Diff',
             column || vscode.ViewColumn.One,
             {
-                // Enable javascript in the webview
                 enableScripts: true,
-                // Allow loading from extension media and workspace folders
-                localResourceRoots: localResourceRoots
+                localResourceRoots: localResourceRoots,
+                retainContextWhenHidden: true
             }
         );
 
         ImageDiffPanel.currentPanel = new ImageDiffPanel(panel, extensionUri);
 
-        // Store images to load after webview is ready (avoids race condition)
-        if (leftImageUri && rightImageUri) {
-            ImageDiffPanel.currentPanel._pendingImages = { leftUri: leftImageUri, rightUri: rightImageUri };
+        if (imageUris && imageUris.length >= 2) {
+            ImageDiffPanel.currentPanel._pendingImages = imageUris;
         }
     }
 
@@ -57,43 +61,38 @@ export class ImageDiffPanel {
         this._panel = panel;
         this._extensionUri = extensionUri;
 
-        // Set the webview's initial html content
         this._update();
 
-        // Listen for when the panel is disposed
-        // This happens when the user closes the panel or when the panel is closed programmatically
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
-        // Handle messages from the webview
         this._panel.webview.onDidReceiveMessage(
-            async message => {
-                switch (message.command) {
-                    case 'webviewReady':
-                        // Webview is ready, load any pending images
-                        this._webviewReady = true;
-                        if (this._pendingImages) {
-                            await this._loadImages(this._pendingImages.leftUri, this._pendingImages.rightUri);
-                            this._pendingImages = undefined;
-                        }
-                        return;
-                    case 'loadImage':
-                        try {
-                            const uri = vscode.Uri.parse(message.uri);
-                            const fileData = await vscode.workspace.fs.readFile(uri);
-                            const base64 = Buffer.from(fileData).toString('base64');
-                            const mimeType = this._getMimeType(uri.fsPath);
+            async (message) => {
+                if (message.command === 'webviewReady') {
+                    this._webviewReady = true;
+                    if (this._pendingImages) {
+                        await this._loadImages(this._pendingImages);
+                        this._pendingImages = undefined;
+                    }
+                    return;
+                }
 
-                            this._panel.webview.postMessage({
-                                command: 'imageLoaded',
-                                data: `data:${mimeType};base64,${base64}`,
-                                filename: uri.fsPath,
-                                isRight: message.isRight
-                            });
-                        } catch (e) {
-                            console.error('Failed to load image:', e);
-                            vscode.window.showErrorMessage(`Failed to load image: ${e}`);
-                        }
-                        return;
+                if (message.command === 'loadImage') {
+                    try {
+                        const uri = vscode.Uri.parse(message.uri);
+                        const fileData = await vscode.workspace.fs.readFile(uri);
+                        const base64 = Buffer.from(fileData).toString('base64');
+                        const mimeType = this._getMimeType(uri.fsPath);
+
+                        this._panel.webview.postMessage({
+                            command: 'imageLoaded',
+                            data: `data:${mimeType};base64,${base64}`,
+                            filename: uri.fsPath,
+                            index: message.index
+                        });
+                    } catch (e) {
+                        console.error('Failed to load image:', e);
+                        vscode.window.showErrorMessage(`Failed to load image: ${e}`);
+                    }
                 }
             },
             null,
@@ -102,86 +101,63 @@ export class ImageDiffPanel {
     }
 
     private _getMimeType(filePath: string): string {
-        const ext = filePath.split('.').pop()?.toLowerCase();
-        switch (ext) {
-            case 'png': return 'image/png';
-            case 'jpg':
-            case 'jpeg': return 'image/jpeg';
-            case 'gif': return 'image/gif';
-            case 'webp': return 'image/webp';
-            case 'svg': return 'image/svg+xml';
-            case 'bmp': return 'image/bmp';
-            default: return 'application/octet-stream';
-        }
+        const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+        return MIME_TYPES[ext] ?? 'application/octet-stream';
     }
 
-    private async _loadImages(leftUri: vscode.Uri, rightUri: vscode.Uri) {
-        // If webview is not ready yet, store as pending
+    private async _loadImages(imageUris: vscode.Uri[]): Promise<void> {
         if (!this._webviewReady) {
-            this._pendingImages = { leftUri, rightUri };
+            this._pendingImages = imageUris;
             return;
         }
 
         try {
-            // Load left image using workspace.fs API (works for both local and remote)
-            console.log('Loading left image:', leftUri.toString());
-            const leftData = await vscode.workspace.fs.readFile(leftUri);
-            const leftBase64 = Buffer.from(leftData).toString('base64');
-            const leftMimeType = this._getMimeType(leftUri.path || leftUri.fsPath);
-
-            // Load right image
-            console.log('Loading right image:', rightUri.toString());
-            const rightData = await vscode.workspace.fs.readFile(rightUri);
-            const rightBase64 = Buffer.from(rightData).toString('base64');
-            const rightMimeType = this._getMimeType(rightUri.path || rightUri.fsPath);
-
-            // Send both images to webview
             this._panel.webview.postMessage({
-                command: 'imageLoaded',
-                data: `data:${leftMimeType};base64,${leftBase64}`,
-                filename: leftUri.path || leftUri.fsPath,
-                isRight: false
+                command: 'imagesCount',
+                count: imageUris.length
             });
 
-            this._panel.webview.postMessage({
-                command: 'imageLoaded',
-                data: `data:${rightMimeType};base64,${rightBase64}`,
-                filename: rightUri.path || rightUri.fsPath,
-                isRight: true
-            });
+            for (let i = 0; i < imageUris.length; i++) {
+                const uri = imageUris[i];
+                const imageData = await vscode.workspace.fs.readFile(uri);
+                const base64 = Buffer.from(imageData).toString('base64');
+                const filePath = uri.path || uri.fsPath;
+                const mimeType = this._getMimeType(filePath);
+
+                this._panel.webview.postMessage({
+                    command: 'imageLoaded',
+                    data: `data:${mimeType};base64,${base64}`,
+                    filename: filePath,
+                    index: i
+                });
+            }
         } catch (e) {
             console.error('Failed to load images:', e);
             vscode.window.showErrorMessage(`Failed to load images: ${e}`);
         }
     }
 
-    public dispose() {
+    public dispose(): void {
         ImageDiffPanel.currentPanel = undefined;
-
-        // Clean up our resources
         this._panel.dispose();
 
-        while (this._disposables.length) {
-            const x = this._disposables.pop();
-            if (x) {
-                x.dispose();
-            }
+        for (const disposable of this._disposables) {
+            disposable.dispose();
         }
+        this._disposables = [];
     }
 
-    private _update() {
-        const webview = this._panel.webview;
-        this._panel.webview.html = this._getHtmlForWebview(webview);
+    private _update(): void {
+        this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
-        // Local path to main script run in the webview
-        const scriptPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js');
-        const stylePathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'style.css');
-
-        // And the uri we use to load this script in the webview
-        const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
-        const styleUri = webview.asWebviewUri(stylePathOnDisk);
+    private _getHtmlForWebview(webview: vscode.Webview): string {
+        const scriptUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js')
+        );
+        const styleUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'style.css')
+        );
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -200,33 +176,20 @@ export class ImageDiffPanel {
             </svg>
         </button>
         <div class="mode-controls">
-            <select id="modeSelector" class="mode-selector">
-                <option value="sidebyside">Side by Side</option>
-                <option value="dissolve">Dissolve</option>
-            </select>
-            <div id="opacityControl" class="opacity-control">
-                <label for="opacitySlider">Opacity:</label>
-                <input type="range" id="opacitySlider" class="opacity-slider" min="0" max="100" value="50">
-            </div>
             <div id="differencesControl" class="differences-control active">
                 <input type="checkbox" id="differencesCheckbox">
                 <label for="differencesCheckbox">Differences</label>
             </div>
+            <div id="referenceControl" class="reference-control">
+                <label for="referenceSelector">Reference:</label>
+                <select id="referenceSelector" class="reference-selector">
+                </select>
+            </div>
         </div>
     </div>
     <div class="container">
-        <div id="left-container" class="image-container">
-            <div class="filename" id="left-filename"></div>
-            <div class="placeholder">Select 2 images in Explorer, right-click and choose "Compare Images with Sync Diff"</div>
-            <img id="left-image" class="sync-image" draggable="false" />
-            <img id="overlay-image" class="sync-image" draggable="false" />
-            <canvas id="overlay-diff-canvas"></canvas>
-        </div>
-        <div id="right-container" class="image-container">
-            <div class="filename" id="right-filename"></div>
-            <div class="placeholder">Select 2 images in Explorer, right-click and choose "Compare Images with Sync Diff"</div>
-            <img id="right-image" class="sync-image" draggable="false" />
-            <canvas id="diff-canvas"></canvas>
+        <div id="images-container" class="images-container">
+            <!-- All images will be dynamically added here in a mosaic -->
         </div>
     </div>
     <script src="${scriptUri}"></script>

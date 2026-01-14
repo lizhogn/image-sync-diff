@@ -36,40 +36,6 @@ body {
     gap: 12px;
 }
 
-.mode-selector {
-    background-color: var(--vscode-input-background);
-    color: var(--vscode-input-foreground);
-    border: 1px solid var(--vscode-input-border);
-    padding: 4px 8px;
-    font-size: 12px;
-    border-radius: 3px;
-    cursor: pointer;
-}
-
-.mode-selector:hover {
-    background-color: var(--vscode-list-hoverBackground);
-}
-
-.opacity-control {
-    display: none;
-    align-items: center;
-    gap: 8px;
-}
-
-.opacity-control.active {
-    display: flex;
-}
-
-.opacity-control label {
-    font-size: 11px;
-    opacity: 0.8;
-}
-
-.opacity-slider {
-    width: 120px;
-    cursor: pointer;
-}
-
 .differences-control {
     display: none;
     align-items: center;
@@ -89,6 +55,31 @@ body {
 
 .differences-control input[type="checkbox"] {
     cursor: pointer;
+}
+
+.reference-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.reference-control label {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.reference-selector {
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.reference-selector:hover {
+    background-color: var(--vscode-list-hoverBackground);
 }
 
 #overlayBtn {
@@ -118,37 +109,41 @@ body {
     overflow: hidden;
 }
 
-/* Dissolve mode: stack images on top of each other */
-.container.dissolve-mode {
-    display: block;
-}
-
-.container.dissolve-mode .image-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-right: none;
-}
-
-.container.dissolve-mode #right-container {
-    z-index: 5;
-}
-
-.image-container {
+.images-container {
     flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-auto-rows: 1fr;
+    overflow: hidden;
+}
+
+.images-container[data-count="2"],
+.images-container[data-count="3"],
+.images-container[data-count="4"] {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.images-container[data-count="5"],
+.images-container[data-count="6"],
+.images-container[data-count="7"],
+.images-container[data-count="8"],
+.images-container[data-count="9"] {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.image-item-container {
     position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
     overflow: hidden;
-    border-right: 1px solid var(--vscode-panel-border);
+    border: 1px solid var(--vscode-panel-border);
     background-color: var(--vscode-editor-background);
 }
 
-.image-container:last-child {
-    border-right: none;
+.image-item-container.reference {
+    border: 3px solid var(--vscode-focusBorder);
+    box-shadow: 0 0 8px var(--vscode-focusBorder);
 }
 
 .placeholder {
@@ -170,50 +165,20 @@ body {
     pointer-events: none;
     z-index: 20;
     display: none;
-    /* Hidden by default until file loaded */
 }
 
 .sync-image {
     max-width: 100%;
     max-height: 100%;
+    width: auto;
+    height: auto;
+    transform-origin: center center;
+    object-fit: contain;
 }
 
-#overlay-image {
-    display: none;
-    /* Hidden by default */
-}
-
-#diff-canvas {
+.comparison-diff-canvas {
     max-width: 100%;
     max-height: 100%;
+    transform-origin: center center;
     display: none;
-}
-
-/* Overlay Mode Styles */
-.container.overlay-mode #left-image {
-    display: none;
-    /* Hide left image */
-}
-
-.container.overlay-mode #overlay-image {
-    display: block;
-    /* Show overlay image */
-}
-
-#overlay-diff-canvas {
-    max-width: 100%;
-    max-height: 100%;
-    display: none;
-    position: absolute;
-}
-
-/* Overlay Diff Mode Styles (when differences checkbox is checked) */
-.container.overlay-diff-mode #left-image {
-    display: none;
-    /* Hide left image */
-}
-
-.container.overlay-diff-mode #overlay-diff-canvas {
-    display: block;
-    /* Show difference overlay canvas */
 }

@@ -1,109 +1,151 @@
 (function () {
-    const leftContainer = document.getElementById('left-container');
-    const rightContainer = document.getElementById('right-container');
-    const leftImage = document.getElementById('left-image');
-    const rightImage = document.getElementById('right-image');
-    const overlayImage = document.getElementById('overlay-image');
+    const imagesContainer = document.getElementById('images-container');
     const overlayBtn = document.getElementById('overlayBtn');
     const container = document.querySelector('.container');
     const zoomLevelEl = document.getElementById('zoom-level');
-    const leftFilenameEl = document.getElementById('left-filename');
-    const rightFilenameEl = document.getElementById('right-filename');
-    const diffCanvas = document.getElementById('diff-canvas');
-    const overlayDiffCanvas = document.getElementById('overlay-diff-canvas');
-
-    // Mode controls
-    const modeSelector = document.getElementById('modeSelector');
-    const opacityControl = document.getElementById('opacityControl');
-    const opacitySlider = document.getElementById('opacitySlider');
-    const differencesControl = document.getElementById('differencesControl');
     const differencesCheckbox = document.getElementById('differencesCheckbox');
+    const referenceSelector = document.getElementById('referenceSelector');
 
-    // Access VS Code API
     const vscode = acquireVsCodeApi();
 
-    // State for pan/zoom and mode
-    let state = {
+    const state = {
         scale: 1,
         panning: false,
         pointX: 0,
         pointY: 0,
         startX: 0,
         startY: 0,
-        mode: 'sidebyside',
         showDifferences: false,
-        leftImageData: null,
-        rightImageData: null
+        images: [],
+        referenceIndex: 0,
+        imageContainers: [],
+        expectedImageCount: 0,
+        loadedImageCount: 0
     };
+
+    function getFilename(path) {
+        return path.split(/[/\\]/).pop();
+    }
 
     function updateZoomDisplay() {
         zoomLevelEl.textContent = `${Math.round(state.scale * 100)}%`;
     }
 
-    // Helper to display image
-    function displayImage(imgElement, filenameElement, src, filename, isRight = false) {
-        imgElement.src = src;
-        if (isRight) {
-            overlayImage.src = src;
-            state.rightImageData = src;
-        } else {
-            state.leftImageData = src;
-        }
-
-        // Hide placeholder
-        const p = imgElement.parentElement.querySelector('.placeholder');
-        if (p) p.style.display = 'none';
-
-        // Show filename
-        filenameElement.textContent = filename;
-        filenameElement.style.display = 'block';
-
-        // Update differences if enabled
-        if (state.showDifferences && state.leftImageData && state.rightImageData) {
-            calculateDifferences();
-        }
-
-        // Reset view when new image loads
-        resetView();
+    function updateReferenceSelector() {
+        referenceSelector.innerHTML = '';
+        state.images.forEach((img, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = getFilename(img.filename);
+            option.selected = index === state.referenceIndex;
+            referenceSelector.appendChild(option);
+        });
     }
 
-    // Calculate and display image differences
-    function calculateDifferences() {
-        if (!state.leftImageData || !state.rightImageData) {
-            return;
-        }
+    function createImageContainers() {
+        imagesContainer.innerHTML = '';
+        state.imageContainers = [];
+        imagesContainer.setAttribute('data-count', state.images.length.toString());
 
-        // Create temporary images to load the data
+        state.images.forEach((img, index) => {
+            const containerDiv = document.createElement('div');
+            containerDiv.className = 'image-item-container';
+            containerDiv.id = `image-container-${index}`;
+
+            if (index === state.referenceIndex) {
+                containerDiv.classList.add('reference');
+            }
+
+            const filenameDiv = document.createElement('div');
+            filenameDiv.className = 'filename';
+            filenameDiv.textContent = getFilename(img.filename);
+            filenameDiv.style.display = 'block';
+
+            const imgElement = document.createElement('img');
+            imgElement.className = 'sync-image';
+            imgElement.draggable = false;
+            imgElement.src = img.data;
+
+            const diffCanvas = document.createElement('canvas');
+            diffCanvas.className = 'comparison-diff-canvas';
+
+            containerDiv.appendChild(filenameDiv);
+            containerDiv.appendChild(imgElement);
+            containerDiv.appendChild(diffCanvas);
+            imagesContainer.appendChild(containerDiv);
+
+            state.imageContainers.push({
+                container: containerDiv,
+                image: imgElement,
+                diffCanvas: diffCanvas,
+                imageIndex: index
+            });
+        });
+
+        updateTransform();
+
+        if (state.showDifferences) {
+            calculateAllDifferences();
+        }
+    }
+
+    function updateReferenceHighlight() {
+        state.imageContainers.forEach((imgContainer, index) => {
+            imgContainer.container.classList.toggle('reference', index === state.referenceIndex);
+        });
+
+        if (state.showDifferences) {
+            calculateAllDifferences();
+        }
+    }
+
+    function calculateAllDifferences() {
+        if (state.images.length < 2) return;
+
+        const referenceImg = state.images[state.referenceIndex];
+        if (!referenceImg) return;
+
+        state.imageContainers.forEach(imgContainer => {
+            if (imgContainer.imageIndex === state.referenceIndex) {
+                imgContainer.diffCanvas.style.display = 'none';
+                imgContainer.image.style.display = 'block';
+                return;
+            }
+
+            const comparisonImg = state.images[imgContainer.imageIndex];
+            if (!comparisonImg) return;
+
+            calculateDifference(referenceImg, comparisonImg, imgContainer.diffCanvas);
+        });
+    }
+
+    function calculateDifference(refImg, compImg, diffCanvas) {
         const img1 = new Image();
         const img2 = new Image();
+        let loadedCount = 0;
 
-        let loaded = 0;
-        const onLoad = () => {
-            loaded++;
-            if (loaded === 2) {
-                processDifferences(img1, img2);
+        function onLoad() {
+            loadedCount++;
+            if (loadedCount === 2) {
+                processDifferences(img1, img2, diffCanvas);
             }
-        };
+        }
 
         img1.onload = onLoad;
         img2.onload = onLoad;
-        img1.src = state.leftImageData;
-        img2.src = state.rightImageData;
+        img1.src = refImg.data;
+        img2.src = compImg.data;
     }
 
-    function processDifferences(img1, img2) {
+    function processDifferences(img1, img2, diffCanvas) {
         const width = Math.max(img1.width, img2.width);
         const height = Math.max(img1.height, img2.height);
 
         diffCanvas.width = width;
         diffCanvas.height = height;
-        overlayDiffCanvas.width = width;
-        overlayDiffCanvas.height = height;
 
         const ctx = diffCanvas.getContext('2d');
-        const overlayCtx = overlayDiffCanvas.getContext('2d');
 
-        // Draw both images on temporary canvases to get pixel data
         const canvas1 = document.createElement('canvas');
         const canvas2 = document.createElement('canvas');
         canvas1.width = width;
@@ -131,106 +173,45 @@
             const g2 = imageData2.data[i + 1];
             const b2 = imageData2.data[i + 2];
 
-            // Calculate absolute difference
             const rDiff = Math.abs(r1 - r2);
             const gDiff = Math.abs(g1 - g2);
             const bDiff = Math.abs(b1 - b2);
 
-            // Amplify differences for visibility
             diffData.data[i] = Math.min(255, rDiff * 3);
             diffData.data[i + 1] = Math.min(255, gDiff * 3);
             diffData.data[i + 2] = Math.min(255, bDiff * 3);
-            diffData.data[i + 3] = 255; // Full opacity
+            diffData.data[i + 3] = 255;
         }
 
         ctx.putImageData(diffData, 0, 0);
-        overlayCtx.putImageData(diffData, 0, 0);
-
-        // Apply transform to diff canvases
-        const transform = `translate(${state.pointX}px, ${state.pointY}px) scale(${state.scale})`;
-        diffCanvas.style.transform = transform;
-        overlayDiffCanvas.style.transform = transform;
+        diffCanvas.style.transform = getTransformString();
     }
 
-    // Mode switching
-    function switchMode(newMode) {
-        state.mode = newMode;
-
-        if (newMode === 'dissolve') {
-            // Show dissolve mode
-            container.classList.add('dissolve-mode');
-            opacityControl.classList.add('active');
-            differencesControl.classList.remove('active');
-
-            // Reset differences if it was enabled
-            if (state.showDifferences) {
-                differencesCheckbox.checked = false;
-                state.showDifferences = false;
-                hideDifferences();
-            }
-
-            // Set initial opacity
-            updateOpacity(opacitySlider.value);
-        } else {
-            // Show side by side mode
-            container.classList.remove('dissolve-mode');
-            opacityControl.classList.remove('active');
-            differencesControl.classList.add('active');
-
-            // Reset right image opacity
-            rightContainer.style.opacity = 1;
-        }
-    }
-
-    // Update opacity for dissolve mode
-    function updateOpacity(value) {
-        const opacity = value / 100;
-        rightContainer.style.opacity = opacity;
-    }
-
-    // Show/hide differences
     function toggleDifferences(show) {
         state.showDifferences = show;
 
         if (show) {
-            calculateDifferences();
-            rightImage.style.display = 'none';
-            diffCanvas.style.display = 'block';
-        } else {
-            hideDifferences();
+            calculateAllDifferences();
         }
+
+        state.imageContainers.forEach(imgContainer => {
+            const isReference = imgContainer.imageIndex === state.referenceIndex;
+            const showDiff = show && !isReference;
+            imgContainer.image.style.display = showDiff ? 'none' : 'block';
+            imgContainer.diffCanvas.style.display = showDiff ? 'block' : 'none';
+        });
     }
 
-    function hideDifferences() {
-        rightImage.style.display = 'block';
-        diffCanvas.style.display = 'none';
+    function getTransformString() {
+        return `translate(${state.pointX}px, ${state.pointY}px) scale(${state.scale})`;
     }
 
-    // Event listeners for mode controls
-    modeSelector.addEventListener('change', (e) => {
-        switchMode(e.target.value);
-    });
-
-    opacitySlider.addEventListener('input', (e) => {
-        updateOpacity(e.target.value);
-    });
-
-    differencesCheckbox.addEventListener('change', (e) => {
-        toggleDifferences(e.target.checked);
-    });
-
-    // --- Sync Zoom & Pan ---
     function updateTransform() {
-        const transform = `translate(${state.pointX}px, ${state.pointY}px) scale(${state.scale})`;
-        leftImage.style.transform = transform;
-        rightImage.style.transform = transform;
-        overlayImage.style.transform = transform;
-        overlayDiffCanvas.style.transform = transform;
-
-        // Also update diff canvas transform if it's visible
-        if (diffCanvas.style.display === 'block') {
-            diffCanvas.style.transform = transform;
-        }
+        const transform = getTransformString();
+        state.imageContainers.forEach(imgContainer => {
+            imgContainer.image.style.transform = transform;
+            imgContainer.diffCanvas.style.transform = transform;
+        });
     }
 
     function resetView() {
@@ -248,14 +229,30 @@
     container.addEventListener('wheel', (e) => {
         e.preventDefault();
 
-        // Determine zoom direction
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
-
-        // Adjust scale
         const newScale = state.scale * delta;
 
-        // Limit scale
         if (newScale < 0.1 || newScale > 10) return;
+
+        // Find which image container the mouse is over
+        const target = e.target.closest('.image-item-container');
+        if (target) {
+            // Get the center of this specific container
+            const rect = target.getBoundingClientRect();
+            const containerCenterX = rect.left + rect.width / 2;
+            const containerCenterY = rect.top + rect.height / 2;
+
+            // Get mouse position relative to this container's center
+            const mouseOffsetX = e.clientX - containerCenterX;
+            const mouseOffsetY = e.clientY - containerCenterY;
+
+            // Calculate how much the point moves due to scale change
+            const scaleChange = newScale / state.scale;
+
+            // Adjust pan to keep the point under the mouse stationary
+            state.pointX = state.pointX + mouseOffsetX * (1 - scaleChange);
+            state.pointY = state.pointY + mouseOffsetY * (1 - scaleChange);
+        }
 
         state.scale = newScale;
         updateTransform();
@@ -264,7 +261,7 @@
 
     // Pan
     container.addEventListener('mousedown', (e) => {
-        if (e.target.closest('button')) return; // Don't pan if clicking button
+        if (e.target.closest('button')) return;
         e.preventDefault();
         state.startX = e.clientX - state.pointX;
         state.startY = e.clientY - state.pointY;
@@ -287,41 +284,79 @@
         state.panning = false;
     });
 
-    // --- Overlay ---
-    overlayBtn.addEventListener('mousedown', () => {
-        if (state.showDifferences) {
-            // Show difference overlay on left image
-            container.classList.add('overlay-diff-mode');
-        } else {
-            container.classList.add('overlay-mode');
+    // Event listeners for controls
+    differencesCheckbox.addEventListener('change', (e) => {
+        toggleDifferences(e.target.checked);
+    });
+
+    referenceSelector.addEventListener('change', (e) => {
+        state.referenceIndex = parseInt(e.target.value);
+        updateReferenceHighlight();
+    });
+
+    // Keyboard shortcuts for switching reference image (Ctrl+Alt+1-9)
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.altKey && e.key >= '1' && e.key <= '9') {
+            e.preventDefault();
+            const index = parseInt(e.key) - 1;
+            if (index >= 0 && index < state.images.length) {
+                state.referenceIndex = index;
+                referenceSelector.value = index;
+                updateReferenceHighlight();
+            }
         }
     });
 
-    overlayBtn.addEventListener('mouseup', () => {
-        container.classList.remove('overlay-mode');
-        container.classList.remove('overlay-diff-mode');
+    function restoreOriginalImages() {
+        state.imageContainers.forEach(imgContainer => {
+            if (imgContainer.originalSrc) {
+                imgContainer.image.src = imgContainer.originalSrc;
+                delete imgContainer.originalSrc;
+            }
+        });
+    }
+
+    overlayBtn.addEventListener('mousedown', () => {
+        const referenceImage = state.images[state.referenceIndex];
+        if (!referenceImage) return;
+
+        state.imageContainers.forEach(imgContainer => {
+            if (imgContainer.imageIndex !== state.referenceIndex) {
+                imgContainer.originalSrc = imgContainer.image.src;
+                imgContainer.image.src = referenceImage.data;
+            }
+        });
     });
 
-    // Also handle mouse leave on button just in case
-    overlayBtn.addEventListener('mouseleave', () => {
-        container.classList.remove('overlay-mode');
-        container.classList.remove('overlay-diff-mode');
-    });
+    overlayBtn.addEventListener('mouseup', restoreOriginalImages);
+    overlayBtn.addEventListener('mouseleave', restoreOriginalImages);
 
-    // --- Message listener for loaded images from extension ---
     window.addEventListener('message', event => {
         const message = event.data;
-        switch (message.command) {
-            case 'imageLoaded':
-                const imgElement = message.isRight ? rightImage : leftImage;
-                const filenameElement = message.isRight ? rightFilenameEl : leftFilenameEl;
-                displayImage(imgElement, filenameElement, message.data, message.filename, message.isRight);
-                break;
+
+        if (message.command === 'imagesCount') {
+            state.images = [];
+            state.expectedImageCount = message.count;
+            state.loadedImageCount = 0;
+            state.referenceIndex = 0;
+            return;
+        }
+
+        if (message.command === 'imageLoaded') {
+            state.images[message.index] = {
+                data: message.data,
+                filename: message.filename
+            };
+            state.loadedImageCount++;
+
+            if (state.loadedImageCount === state.expectedImageCount) {
+                updateReferenceSelector();
+                createImageContainers();
+                resetView();
+            }
         }
     });
 
-    // Notify extension that webview is ready to receive images
-    // This prevents race condition where images are sent before webview is loaded
     vscode.postMessage({ command: 'webviewReady' });
 
 })();

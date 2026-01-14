@@ -12,6 +12,14 @@
     "categories": [
         "Other"
     ],
+    "activationEvents": [
+        "onCommand:image-sync-diff.start",
+        "onCommand:image-sync-diff.compareImages",
+        "onCommand:image-sync-diff.setFirstImage",
+        "onCommand:image-sync-diff.compareWithFirst",
+        "onCommand:image-sync-diff.clearFirstImage",
+        "onView:image-sync-diff-sidebar"
+    ],
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
