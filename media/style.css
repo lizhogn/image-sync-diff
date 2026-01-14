@@ -57,6 +57,28 @@ body {
     cursor: pointer;
 }
 
+.dissolve-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dissolve-control label {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+.dissolve-control input[type="range"] {
+    width: 100px;
+    cursor: pointer;
+}
+
+.dissolve-control span {
+    font-size: 11px;
+    opacity: 0.8;
+    min-width: 35px;
+}
+
 .reference-control {
     display: flex;
     align-items: center;
@@ -180,5 +202,17 @@ body {
     max-width: 100%;
     max-height: 100%;
     transform-origin: center center;
+    display: none;
+}
+
+.dissolve-overlay {
+    position: absolute;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    transform-origin: center center;
+    object-fit: contain;
+    pointer-events: none;
     display: none;
 }

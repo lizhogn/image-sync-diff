@@ -176,6 +176,11 @@ export class ImageDiffPanel {
             </svg>
         </button>
         <div class="mode-controls">
+            <div id="dissolveControl" class="dissolve-control">
+                <label for="dissolveSlider">Dissolve:</label>
+                <input type="range" id="dissolveSlider" min="0" max="100" value="0">
+                <span id="dissolveValue">0%</span>
+            </div>
             <div id="differencesControl" class="differences-control active">
                 <input type="checkbox" id="differencesCheckbox">
                 <label for="differencesCheckbox">Differences</label>

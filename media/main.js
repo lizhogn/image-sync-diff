@@ -8,6 +8,9 @@
 
     const vscode = acquireVsCodeApi();
 
+    const dissolveSlider = document.getElementById('dissolveSlider');
+    const dissolveValue = document.getElementById('dissolveValue');
+
     const state = {
         scale: 1,
         panning: false,
@@ -16,6 +19,7 @@
         startX: 0,
         startY: 0,
         showDifferences: false,
+        dissolveAmount: 0,
         images: [],
         referenceIndex: 0,
         imageContainers: [],
@@ -69,24 +73,48 @@
             const diffCanvas = document.createElement('canvas');
             diffCanvas.className = 'comparison-diff-canvas';
 
+            const overlayImg = document.createElement('img');
+            overlayImg.className = 'dissolve-overlay';
+            overlayImg.draggable = false;
+
             containerDiv.appendChild(filenameDiv);
             containerDiv.appendChild(imgElement);
+            containerDiv.appendChild(overlayImg);
             containerDiv.appendChild(diffCanvas);
             imagesContainer.appendChild(containerDiv);
 
             state.imageContainers.push({
                 container: containerDiv,
                 image: imgElement,
+                overlayImage: overlayImg,
                 diffCanvas: diffCanvas,
                 imageIndex: index
             });
         });
 
         updateTransform();
+        updateDissolve();
 
         if (state.showDifferences) {
             calculateAllDifferences();
         }
+    }
+
+    function updateDissolve() {
+        const referenceImg = state.images[state.referenceIndex];
+        if (!referenceImg) return;
+
+        state.imageContainers.forEach(imgContainer => {
+            if (imgContainer.imageIndex === state.referenceIndex) {
+                imgContainer.overlayImage.style.display = 'none';
+                return;
+            }
+
+            imgContainer.overlayImage.src = referenceImg.data;
+            imgContainer.overlayImage.style.opacity = state.dissolveAmount / 100;
+            imgContainer.overlayImage.style.display = state.dissolveAmount > 0 ? 'block' : 'none';
+            imgContainer.overlayImage.style.transform = getTransformString();
+        });
     }
 
     function updateReferenceHighlight() {
@@ -210,6 +238,7 @@
         const transform = getTransformString();
         state.imageContainers.forEach(imgContainer => {
             imgContainer.image.style.transform = transform;
+            imgContainer.overlayImage.style.transform = transform;
             imgContainer.diffCanvas.style.transform = transform;
         });
     }
@@ -232,7 +261,7 @@
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
         const newScale = state.scale * delta;
 
-        if (newScale < 0.1 || newScale > 10) return;
+        if (newScale < 0.05 || newScale > 50) return;
 
         // Find which image container the mouse is over
         const target = e.target.closest('.image-item-container');
@@ -292,6 +321,13 @@
     referenceSelector.addEventListener('change', (e) => {
         state.referenceIndex = parseInt(e.target.value);
         updateReferenceHighlight();
+        updateDissolve();
+    });
+
+    dissolveSlider.addEventListener('input', (e) => {
+        state.dissolveAmount = parseInt(e.target.value);
+        dissolveValue.textContent = `${state.dissolveAmount}%`;
+        updateDissolve();
     });
 
     // Keyboard shortcuts for switching reference image (Ctrl+Alt+1-9)
