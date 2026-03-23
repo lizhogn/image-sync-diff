@@ -4,7 +4,7 @@
     "publisher": "lizhogn",
     "repository": "https://github.com/lizhogn/image-sync-diff",
     "description": "Synchronized image comparison with overlay support",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "icon": "media/icon.png",
     "engines": {
         "vscode": "^1.80.0"
