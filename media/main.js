@@ -42,6 +42,23 @@
 
     // Helper to display image
     function displayImage(imgElement, filenameElement, src, filename, isRight = false) {
+        // 添加错误处理
+        imgElement.onerror = () => {
+            console.error('Failed to load image:', filename);
+            const p = imgElement.parentElement.querySelector('.placeholder');
+            if (p) {
+                p.textContent = `Error loading: ${filename}`;
+                p.style.display = 'block';
+                p.style.color = '#ff6b6b';
+            }
+        };
+
+        imgElement.onload = () => {
+            console.log('Image loaded successfully:', filename);
+        };
+
+        // 设置 crossOrigin 以便 Canvas 可以读取像素数据
+        imgElement.crossOrigin = "anonymous";
         imgElement.src = src;
         if (isRight) {
             overlayImage.src = src;
@@ -67,7 +84,6 @@
         resetView();
     }
 
-    // Calculate and display image differences
     function calculateDifferences() {
         if (!state.leftImageData || !state.rightImageData) {
             return;
@@ -77,79 +93,130 @@
         const img1 = new Image();
         const img2 = new Image();
 
+        // 设置 crossOrigin 以便 Canvas 读取
+        img1.crossOrigin = "anonymous";
+        img2.crossOrigin = "anonymous";
+
         let loaded = 0;
+        let hasError = false;
+
         const onLoad = () => {
             loaded++;
-            if (loaded === 2) {
-                processDifferences(img1, img2);
+            if (loaded === 2 && !hasError) {
+                try {
+                    processDifferences(img1, img2);
+                } catch (e) {
+                    console.error('Failed to process differences:', e);
+                    vscode.window.showErrorMessage('Unable to calculate differences due to CORS restrictions');
+                }
             }
         };
 
+        const onError = () => {
+            hasError = true;
+            console.error('Failed to load images for difference calculation');
+        };
+
         img1.onload = onLoad;
+        img1.onerror = onError;
         img2.onload = onLoad;
+        img2.onerror = onError;
+
         img1.src = state.leftImageData;
         img2.src = state.rightImageData;
     }
 
     function processDifferences(img1, img2) {
-        const width = Math.max(img1.width, img2.width);
-        const height = Math.max(img1.height, img2.height);
+        try {
+            const width = Math.max(img1.width, img2.width);
+            const height = Math.max(img1.height, img2.height);
 
-        diffCanvas.width = width;
-        diffCanvas.height = height;
-        overlayDiffCanvas.width = width;
-        overlayDiffCanvas.height = height;
+            if (width === 0 || height === 0) {
+                console.warn('Image has zero dimension, skipping diff calculation');
+                return;
+            }
 
-        const ctx = diffCanvas.getContext('2d');
-        const overlayCtx = overlayDiffCanvas.getContext('2d');
+            diffCanvas.width = width;
+            diffCanvas.height = height;
+            overlayDiffCanvas.width = width;
+            overlayDiffCanvas.height = height;
 
-        // Draw both images on temporary canvases to get pixel data
-        const canvas1 = document.createElement('canvas');
-        const canvas2 = document.createElement('canvas');
-        canvas1.width = width;
-        canvas1.height = height;
-        canvas2.width = width;
-        canvas2.height = height;
+            const ctx = diffCanvas.getContext('2d');
+            const overlayCtx = overlayDiffCanvas.getContext('2d');
 
-        const ctx1 = canvas1.getContext('2d');
-        const ctx2 = canvas2.getContext('2d');
+            if (!ctx || !overlayCtx) {
+                console.error('Failed to get canvas context');
+                return;
+            }
 
-        ctx1.drawImage(img1, 0, 0);
-        ctx2.drawImage(img2, 0, 0);
+            // Draw both images on temporary canvases to get pixel data
+            const canvas1 = document.createElement('canvas');
+            const canvas2 = document.createElement('canvas');
+            canvas1.width = width;
+            canvas1.height = height;
+            canvas2.width = width;
+            canvas2.height = height;
 
-        const imageData1 = ctx1.getImageData(0, 0, width, height);
-        const imageData2 = ctx2.getImageData(0, 0, width, height);
-        const diffData = ctx.createImageData(width, height);
+            const ctx1 = canvas1.getContext('2d');
+            const ctx2 = canvas2.getContext('2d');
 
-        // Calculate pixel differences
-        for (let i = 0; i < imageData1.data.length; i += 4) {
-            const r1 = imageData1.data[i];
-            const g1 = imageData1.data[i + 1];
-            const b1 = imageData1.data[i + 2];
+            if (!ctx1 || !ctx2) {
+                console.error('Failed to get temp canvas context');
+                return;
+            }
 
-            const r2 = imageData2.data[i];
-            const g2 = imageData2.data[i + 1];
-            const b2 = imageData2.data[i + 2];
+            ctx1.drawImage(img1, 0, 0);
+            ctx2.drawImage(img2, 0, 0);
 
-            // Calculate absolute difference
-            const rDiff = Math.abs(r1 - r2);
-            const gDiff = Math.abs(g1 - g2);
-            const bDiff = Math.abs(b1 - b2);
+            let imageData1, imageData2;
+            try {
+                imageData1 = ctx1.getImageData(0, 0, width, height);
+                imageData2 = ctx2.getImageData(0, 0, width, height);
+            } catch (e) {
+                console.error('Canvas CORS error:', e);
+                // 显示友好提示
+                const errorDiv = document.createElement('div');
+                errorDiv.textContent = 'Difference calculation unavailable (CORS)';
+                errorDiv.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#ff6b6b;font-size:12px;';
+                rightContainer.appendChild(errorDiv);
+                setTimeout(() => errorDiv.remove(), 3000);
+                return;
+            }
 
-            // Amplify differences for visibility
-            diffData.data[i] = Math.min(255, rDiff * 3);
-            diffData.data[i + 1] = Math.min(255, gDiff * 3);
-            diffData.data[i + 2] = Math.min(255, bDiff * 3);
-            diffData.data[i + 3] = 255; // Full opacity
+            const diffData = ctx.createImageData(width, height);
+
+            // Calculate pixel differences
+            for (let i = 0; i < imageData1.data.length; i += 4) {
+                const r1 = imageData1.data[i];
+                const g1 = imageData1.data[i + 1];
+                const b1 = imageData1.data[i + 2];
+
+                const r2 = imageData2.data[i];
+                const g2 = imageData2.data[i + 1];
+                const b2 = imageData2.data[i + 2];
+
+                // Calculate absolute difference
+                const rDiff = Math.abs(r1 - r2);
+                const gDiff = Math.abs(g1 - g2);
+                const bDiff = Math.abs(b1 - b2);
+
+                // Amplify differences for visibility
+                diffData.data[i] = Math.min(255, rDiff * 3);
+                diffData.data[i + 1] = Math.min(255, gDiff * 3);
+                diffData.data[i + 2] = Math.min(255, bDiff * 3);
+                diffData.data[i + 3] = 255; // Full opacity
+            }
+
+            ctx.putImageData(diffData, 0, 0);
+            overlayCtx.putImageData(diffData, 0, 0);
+
+            // Apply transform to diff canvases
+            const transform = `translate(${state.pointX}px, ${state.pointY}px) scale(${state.scale})`;
+            diffCanvas.style.transform = transform;
+            overlayDiffCanvas.style.transform = transform;
+        } catch (e) {
+            console.error('Error in processDifferences:', e);
         }
-
-        ctx.putImageData(diffData, 0, 0);
-        overlayCtx.putImageData(diffData, 0, 0);
-
-        // Apply transform to diff canvases
-        const transform = `translate(${state.pointX}px, ${state.pointY}px) scale(${state.scale})`;
-        diffCanvas.style.transform = transform;
-        overlayDiffCanvas.style.transform = transform;
     }
 
     // Mode switching
@@ -315,7 +382,8 @@
             case 'imageLoaded':
                 const imgElement = message.isRight ? rightImage : leftImage;
                 const filenameElement = message.isRight ? rightFilenameEl : leftFilenameEl;
-                displayImage(imgElement, filenameElement, message.data, message.filename, message.isRight);
+                // 现在使用 uri 而不是 data
+                displayImage(imgElement, filenameElement, message.uri, message.filename, message.isRight);
                 break;
         }
     });

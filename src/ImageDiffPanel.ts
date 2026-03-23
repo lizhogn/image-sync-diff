@@ -76,43 +76,11 @@ export class ImageDiffPanel {
                             this._pendingImages = undefined;
                         }
                         return;
-                    case 'loadImage':
-                        try {
-                            const uri = vscode.Uri.parse(message.uri);
-                            const fileData = await vscode.workspace.fs.readFile(uri);
-                            const base64 = Buffer.from(fileData).toString('base64');
-                            const mimeType = this._getMimeType(uri.fsPath);
-
-                            this._panel.webview.postMessage({
-                                command: 'imageLoaded',
-                                data: `data:${mimeType};base64,${base64}`,
-                                filename: uri.fsPath,
-                                isRight: message.isRight
-                            });
-                        } catch (e) {
-                            console.error('Failed to load image:', e);
-                            vscode.window.showErrorMessage(`Failed to load image: ${e}`);
-                        }
-                        return;
                 }
             },
             null,
             this._disposables
         );
-    }
-
-    private _getMimeType(filePath: string): string {
-        const ext = filePath.split('.').pop()?.toLowerCase();
-        switch (ext) {
-            case 'png': return 'image/png';
-            case 'jpg':
-            case 'jpeg': return 'image/jpeg';
-            case 'gif': return 'image/gif';
-            case 'webp': return 'image/webp';
-            case 'svg': return 'image/svg+xml';
-            case 'bmp': return 'image/bmp';
-            default: return 'application/octet-stream';
-        }
     }
 
     private async _loadImages(leftUri: vscode.Uri, rightUri: vscode.Uri) {
@@ -123,30 +91,25 @@ export class ImageDiffPanel {
         }
 
         try {
-            // Load left image using workspace.fs API (works for both local and remote)
-            console.log('Loading left image:', leftUri.toString());
-            const leftData = await vscode.workspace.fs.readFile(leftUri);
-            const leftBase64 = Buffer.from(leftData).toString('base64');
-            const leftMimeType = this._getMimeType(leftUri.path || leftUri.fsPath);
+            // 使用 asWebviewUri 替代 Base64，避免消息大小限制
+            const leftWebviewUri = this._panel.webview.asWebviewUri(leftUri);
+            const rightWebviewUri = this._panel.webview.asWebviewUri(rightUri);
 
-            // Load right image
-            console.log('Loading right image:', rightUri.toString());
-            const rightData = await vscode.workspace.fs.readFile(rightUri);
-            const rightBase64 = Buffer.from(rightData).toString('base64');
-            const rightMimeType = this._getMimeType(rightUri.path || rightUri.fsPath);
+            console.log('Loading left image via WebView URI:', leftWebviewUri.toString());
+            console.log('Loading right image via WebView URI:', rightWebviewUri.toString());
 
-            // Send both images to webview
+            // Send image URIs to webview (much smaller than base64 data)
             this._panel.webview.postMessage({
                 command: 'imageLoaded',
-                data: `data:${leftMimeType};base64,${leftBase64}`,
-                filename: leftUri.path || leftUri.fsPath,
+                uri: leftWebviewUri.toString(),
+                filename: leftUri.fsPath,
                 isRight: false
             });
 
             this._panel.webview.postMessage({
                 command: 'imageLoaded',
-                data: `data:${rightMimeType};base64,${rightBase64}`,
-                filename: rightUri.path || rightUri.fsPath,
+                uri: rightWebviewUri.toString(),
+                filename: rightUri.fsPath,
                 isRight: true
             });
         } catch (e) {
