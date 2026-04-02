@@ -11,6 +11,8 @@
     const rightFilenameEl = document.getElementById('right-filename');
     const diffCanvas = document.getElementById('diff-canvas');
     const overlayDiffCanvas = document.getElementById('overlay-diff-canvas');
+    const leftSpinner = document.getElementById('left-spinner');
+    const rightSpinner = document.getElementById('right-spinner');
 
     // Mode controls
     const modeSelector = document.getElementById('modeSelector');
@@ -41,10 +43,34 @@
     }
 
     // Helper to display image
-    function displayImage(imgElement, filenameElement, src, filename, isRight = false) {
+    function displayImage(imgElement, filenameElement, src, filename, isRight = false, error = false) {
+        const spinner = isRight ? rightSpinner : leftSpinner;
+
+        // 处理错误情况
+        if (error || !src) {
+            console.error('Failed to load image:', filename, error);
+            if (spinner) spinner.classList.remove('active');
+
+            const p = imgElement.parentElement.querySelector('.placeholder');
+            if (p) {
+                p.textContent = `Error loading: ${filename}`;
+                p.style.display = 'block';
+                p.style.color = '#ff6b6b';
+            }
+            imgElement.classList.remove('loaded');
+            return;
+        }
+
+        // 开始加载时显示 spinner，隐藏图片
+        imgElement.classList.remove('loaded');
+        if (spinner) spinner.classList.add('active');
+
         // 添加错误处理
         imgElement.onerror = () => {
             console.error('Failed to load image:', filename);
+            if (spinner) spinner.classList.remove('active');
+            imgElement.classList.remove('loaded');
+
             const p = imgElement.parentElement.querySelector('.placeholder');
             if (p) {
                 p.textContent = `Error loading: ${filename}`;
@@ -55,6 +81,15 @@
 
         imgElement.onload = () => {
             console.log('Image loaded successfully:', filename);
+
+            // 隐藏 spinner，显示图片
+            if (spinner) spinner.classList.remove('active');
+            imgElement.classList.add('loaded');
+
+            // 如果是右侧图片，同时更新 overlayImage
+            if (isRight) {
+                overlayImage.classList.add('loaded');
+            }
         };
 
         // 设置 crossOrigin 以便 Canvas 可以读取像素数据
@@ -62,6 +97,7 @@
         imgElement.src = src;
         if (isRight) {
             overlayImage.src = src;
+            overlayImage.classList.remove('loaded');
             state.rightImageData = src;
         } else {
             state.leftImageData = src;
@@ -382,8 +418,8 @@
             case 'imageLoaded':
                 const imgElement = message.isRight ? rightImage : leftImage;
                 const filenameElement = message.isRight ? rightFilenameEl : leftFilenameEl;
-                // 现在使用 uri 而不是 data
-                displayImage(imgElement, filenameElement, message.uri, message.filename, message.isRight);
+                // 传递 error 参数
+                displayImage(imgElement, filenameElement, message.uri, message.filename, message.isRight, message.error);
                 break;
         }
     });

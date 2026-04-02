@@ -83,6 +83,61 @@ export class ImageDiffPanel {
         );
     }
 
+    private _getMimeType(filePath: string): string {
+        const ext = filePath.split('.').pop()?.toLowerCase() || '';
+        const mimeTypes: { [key: string]: string } = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'bmp': 'image/bmp',
+            'svg': 'image/svg+xml'
+        };
+        return mimeTypes[ext] || 'image/png';
+    }
+
+    private async _loadSingleImage(uri: vscode.Uri, isRight: boolean): Promise<void> {
+        try {
+            console.log(`[${isRight ? 'Right' : 'Left'}] Loading image from:`, uri.fsPath);
+
+            // 读取文件为 Buffer
+            const fileData = await vscode.workspace.fs.readFile(uri);
+            const fileSize = fileData.length;
+            console.log(`[${isRight ? 'Right' : 'Left'}] File size:`, fileSize, 'bytes');
+
+            // 转换为 Base64
+            const base64Data = Buffer.from(fileData).toString('base64');
+            const mimeType = this._getMimeType(uri.fsPath);
+            const dataUri = `data:${mimeType};base64,${base64Data}`;
+
+            console.log(`[${isRight ? 'Right' : 'Left'}] Base64 length:`, dataUri.length, 'chars');
+
+            // 发送图片数据到 webview
+            await this._panel.webview.postMessage({
+                command: 'imageLoaded',
+                uri: dataUri,
+                filename: uri.fsPath,
+                isRight: isRight,
+                error: false
+            });
+
+            console.log(`[${isRight ? 'Right' : 'Left'}] Message sent successfully`);
+        } catch (error) {
+            console.error(`[${isRight ? 'Right' : 'Left'}] Failed to load image:`, uri.fsPath, error);
+
+            // 发送错误消息到 webview
+            this._panel.webview.postMessage({
+                command: 'imageLoaded',
+                uri: '',
+                filename: uri.fsPath,
+                isRight: isRight,
+                error: true,
+                errorMessage: String(error)
+            });
+        }
+    }
+
     private async _loadImages(leftUri: vscode.Uri, rightUri: vscode.Uri) {
         // If webview is not ready yet, store as pending
         if (!this._webviewReady) {
@@ -90,32 +145,17 @@ export class ImageDiffPanel {
             return;
         }
 
-        try {
-            // 使用 asWebviewUri 替代 Base64，避免消息大小限制
-            const leftWebviewUri = this._panel.webview.asWebviewUri(leftUri);
-            const rightWebviewUri = this._panel.webview.asWebviewUri(rightUri);
+        console.log('Starting to load images...');
+        console.log('Left image path:', leftUri.fsPath);
+        console.log('Right image path:', rightUri.fsPath);
 
-            console.log('Loading left image via WebView URI:', leftWebviewUri.toString());
-            console.log('Loading right image via WebView URI:', rightWebviewUri.toString());
+        // 使用 Promise.all 并行加载左右图像，互不影响
+        await Promise.all([
+            this._loadSingleImage(leftUri, false),
+            this._loadSingleImage(rightUri, true)
+        ]);
 
-            // Send image URIs to webview (much smaller than base64 data)
-            this._panel.webview.postMessage({
-                command: 'imageLoaded',
-                uri: leftWebviewUri.toString(),
-                filename: leftUri.fsPath,
-                isRight: false
-            });
-
-            this._panel.webview.postMessage({
-                command: 'imageLoaded',
-                uri: rightWebviewUri.toString(),
-                filename: rightUri.fsPath,
-                isRight: true
-            });
-        } catch (e) {
-            console.error('Failed to load images:', e);
-            vscode.window.showErrorMessage(`Failed to load images: ${e}`);
-        }
+        console.log('All images loading initiated');
     }
 
     public dispose() {
@@ -181,6 +221,7 @@ export class ImageDiffPanel {
         <div id="left-container" class="image-container">
             <div class="filename" id="left-filename"></div>
             <div class="placeholder">Select 2 images in Explorer, right-click and choose "Compare Images with Sync Diff"</div>
+            <div class="loading-spinner" id="left-spinner"></div>
             <img id="left-image" class="sync-image" draggable="false" />
             <img id="overlay-image" class="sync-image" draggable="false" />
             <canvas id="overlay-diff-canvas"></canvas>
@@ -188,6 +229,7 @@ export class ImageDiffPanel {
         <div id="right-container" class="image-container">
             <div class="filename" id="right-filename"></div>
             <div class="placeholder">Select 2 images in Explorer, right-click and choose "Compare Images with Sync Diff"</div>
+            <div class="loading-spinner" id="right-spinner"></div>
             <img id="right-image" class="sync-image" draggable="false" />
             <canvas id="diff-canvas"></canvas>
         </div>
